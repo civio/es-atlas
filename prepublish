@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Simplification
-SP=0.0001
+SP=0.001
 
 # Quantization
 QU=1e4
@@ -9,9 +9,14 @@ QU=1e4
 rm -rvf es
 mkdir -p build es
 
+# Get lineas_limite.zip from Centro Nacional de Información Geográfica & unzip
 curl -o build/lineas_limite.zip -C - 'http://centrodedescargas.cnig.es/CentroDescargas/equipamiento/lineas_limite.zip'
 unzip -jod build build/lineas_limite.zip recintos_municipales* recintos_provinciales*
 
+# Delete .zip file after unzip
+rm -v build/lineas_limite.zip
+
+# Convert shp provinces files to GeoJSON
 geo2topo -n provinces=<( \
     shp2json --encoding utf8 -n build/recintos_provinciales_inspire_peninbal_etrs89.shp \
       | ndjson-map '(d.id = d.properties.NATCODE.slice(4, 6), d)'
@@ -22,6 +27,7 @@ geo2topo -n provinces=<( \
   | topomerge nation=autonomous_regions \
   > es/provinces.json
 
+# Convert shp municipalities files to GeoJSON
 geo2topo -n municipalities=<( \
     shp2json --encoding utf8 -n build/recintos_municipales_inspire_peninbal_etrs89.shp \
       | ndjson-map '(d.id = d.properties.NATCODE.slice(6, 11), d)'
@@ -37,6 +43,8 @@ geo2topo -n municipalities=<( \
 # Re-compute the topology as a further optimization.
 # This consolidates unique sequences of arcs.
 # https://github.com/topojson/topojson-simplify/issues/4
+
+# Create provinces.json containing provinces, autonomous_regions & nation
 topo2geo -n \
   < es/provinces.json \
   provinces=es/_provinces.json \
@@ -58,6 +66,7 @@ geo2topo -n \
 
 rm es/_provinces.json es/_autonomous_regions.json es/_nation.json
 
+# Create municipalities.json containing municipalities, provinces, autonomous_regions & nation
 topo2geo -n \
   < es/municipalities.json \
   municipalities=es/_municipalities.json \
