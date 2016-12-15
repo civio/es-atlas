@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "description": "Pre-built TopoJSON from the Spanish National Geographic Institute",
   "scripts": {
-    "prepublish": "bash prepublish",
-    "postpublish": "VERSION=`node -e 'console.log(require(\"./package.json\").version)'`; git push && git push --tags && cd ../martgnz.github.io && git pull && cp -v ../es-atlas/es/provinces.json es-provinces.v1.json && cp -v ../es-atlas/es/municipalities.json es-municipalities.v1.json && git add es-provinces.v1.json es-municipalities.v1.json && git commit -m \"es-atlas ${VERSION}\" && git push && cd -"
+    "prepublish": "bash prepublish"
   },
   "repository": {
     "type": "git",
@@ -26,8 +25,6 @@
     "d3-geo-projection": "^1.2.1",
     "ndjson-cli": "^0.3.0",
     "shapefile": "^0.5.9",
-    "topojson": "^2.0.0",
-    "topojson-client": "^2.1.0",
-    "topojson-simplify": "^2.0.0"
+    "topojson": "^2.0.0"
   }
 }
