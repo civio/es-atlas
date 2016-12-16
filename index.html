@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<head>
+  <style type="text/css">
+    .sea{
+      fill: #A3CCFF;
+    }
+
+    .nation{
+      fill: #dddddf;
+      stroke: #fff;
+      stroke-width: 1.5px;
+    }
+
+    .autonomous_regions, .provinces{
+      fill: #dfdddd;
+      stroke: #fff;
+      stroke-width: 1.5px;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+
+    .autonomous_regions .active,
+    .provinces  .active{
+      fill: #aaca45;
+      /*stroke: #76b72a;*/
+    }
+
+    .provinces{
+      fill: none;
+      stroke: #fff;
+      stroke-opacity: 0.3;
+      stroke-width: 1px;
+    }
+
+    .municipalities{
+      fill: #aaca45;
+      fill-opacity: 0.7;
+      stroke: #76b72a;
+      stroke-width: 1.5px;
+    }
+
+    .composite-border{
+      fill: none;
+      stroke: #ddd;
+      stroke-width: 1px;
+    }
+  </style>
+</head>
+<body>
+
+  <svg width="960" height="820"></svg>
+
+  <script src="https://d3js.org/d3.v4.min.js"></script>
+  <script src="node_modules/topojson/dist/topojson.min.js"></script>
+  <script src="https://unpkg.com/d3-composite-projections@1.0.2"></script>
+  <script>
+    var dvmi_autonomous_regions = [
+      2,
+      5,
+      14,
+      15,
+      16,
+    ];
+
+    var dvmi_municipalities = [28152,28092,29067,08184,08307,46102,12040,28113,12126,08167,08019,15078,28015,28079,12138,15030,38006,30008,46230,28090,08245];
+
+    var svg        = d3.select('svg'),
+        width      = +svg.attr('width'),
+        height     = +svg.attr('height');
+        
+    var projection = d3.geoConicConformalSpain(),
+        path       = d3.geoPath();
+
+          
+
+    // Get provinces.json
+    d3.json('/es/municipalities.json', function(error, topology) {
+      if (error) throw error;
+
+      projection.scale(2800);
+      //.translate([width / 2, height / 2])
+      path.projection(projection);
+
+      /*
+        // Add sea
+        svg.append('rect')
+          .attr('class', 'sea')
+          .attr('width', width)
+          .attr('height', height);
+      */
+
+      /*
+        // Add nation path
+        svg.append('path')
+          .datum(topojson.feature(topology, topology.objects.nation))
+          .attr('class', 'nation')
+          .attr('d', path);
+      */
+
+      // Add composition border for Canarias
+      svg.append('path')
+        .attr('class', 'composite-border')
+        .attr('d', projection.getCompositionBorders());
+
+      // Add autonomous_regions paths
+      svg.append('g')
+        .attr('class', 'autonomous_regions')
+        .selectAll('path')
+        .data(topojson.feature(topology, topology.objects.autonomous_regions).features)
+        .enter().append('path')
+          .attr('id', function(d){ return 'region-'+d.id; })
+          .attr('class', function(d){ return (dvmi_autonomous_regions.indexOf(+d.id) !== -1) ? 'active' : ''; })
+          .attr('d', path);
+
+      // Add province paths
+      svg.append('g')
+        .attr('class', 'provinces')
+        .selectAll('path')
+        .data(topojson.feature(topology, topology.objects.provinces).features)
+        .enter().append('path')
+          .attr('id', function(d){ return 'province-'+d.id; })
+          .attr('d', path);
+
+      // Get municipalities geometry using TodoJSON & dvmi_municipalities array
+      var municipalities = {
+        geometries: topology.objects.municipalities.geometries.filter(function(d){ return dvmi_municipalities.indexOf(+d.id) !== -1; }),
+        type: 'GeometryCollection'
+      };
+
+      // Add municipalities paths
+      svg.append('g')
+        .attr('class', 'municipalities')
+        .selectAll('circle')
+        .data(topojson.feature(topology, municipalities).features)
+        .enter().append('circle')
+          .attr('id', function(d){ return 'municipality-'+d.id; })
+          .attr('transform', function(d) { return 'translate(' + path.centroid(d) + ')'; })
+          .attr('r', 4);
+      
+    });
+  </script>
+</body>
+</html>
