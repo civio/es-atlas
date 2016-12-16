@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Simplification
-SP=0.001
+SP=0.005
 
 # Quantization
 QU=1e4
@@ -12,9 +12,12 @@ mkdir -p build es
 # Get lineas_limite.zip from Centro Nacional de Información Geográfica & unzip
 curl -o build/lineas_limite.zip -C - 'http://centrodedescargas.cnig.es/CentroDescargas/equipamiento/lineas_limite.zip'
 unzip -jod build build/lineas_limite.zip recintos_municipales* recintos_provinciales*
-
-# Delete .zip file after unzip
 rm -v build/lineas_limite.zip
+
+# Get municipalities codes list from INE & convert to csv
+curl -o build/municipalities_ine_codes.xlsx -C - 'http://www.ine.es/daco/daco42/codmun/codmun16/16codmun.xlsx'
+in2csv build/municipalities_ine_codes.xlsx > es/municipalities_ine_codes.csv
+rm -v build/municipalities_ine_codes.xlsx
 
 # Convert shp provinces files to GeoJSON
 geo2topo -n provinces=<( \
