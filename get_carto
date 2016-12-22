@@ -7,17 +7,7 @@ SP=0.005
 QU=1e4
 
 rm -rvf es
-mkdir -p build es
-
-# Get lineas_limite.zip from Centro Nacional de Información Geográfica & unzip
-curl -o build/lineas_limite.zip -C - 'http://centrodedescargas.cnig.es/CentroDescargas/equipamiento/lineas_limite.zip'
-unzip -jod build build/lineas_limite.zip recintos_municipales* recintos_provinciales*
-rm -v build/lineas_limite.zip
-
-# Get municipalities codes list from INE & convert to csv
-curl -o build/municipalities_ine_codes.xlsx -C - 'http://www.ine.es/daco/daco42/codmun/codmun16/16codmun.xlsx'
-in2csv build/municipalities_ine_codes.xlsx > es/municipalities_ine_codes.csv
-rm -v build/municipalities_ine_codes.xlsx
+mkdir es
 
 # Convert shp provinces files to GeoJSON
 geo2topo -n provinces=<( \
@@ -42,11 +32,6 @@ geo2topo -n municipalities=<( \
   | topomerge nation=autonomous_regions \
   > es/municipalities.json
 
-# Inspired by: https://bl.ocks.org/mbostock/39b34968ad5eab65de1d7da81f78bb27
-# Re-compute the topology as a further optimization.
-# This consolidates unique sequences of arcs.
-# https://github.com/topojson/topojson-simplify/issues/4
-
 # Create provinces.json containing provinces, autonomous_regions & nation
 topo2geo -n \
   < es/provinces.json \
@@ -55,7 +40,7 @@ topo2geo -n \
   nation=es/_nation.json
 
 geo2topo -n \
-  provinces=<( \
+  provinces=es/_provinces.json<( \
       cat es/_provinces.json \
         | ndjson-map '(delete d.properties, d)') \
   autonomous_regions=<( \

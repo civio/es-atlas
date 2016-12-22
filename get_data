@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Get cartography
+if [ ! -d build ]; then
+  # create build folder
+  mkdir build
+  # Get lineas_limite.zip from Centro Nacional de Información Geográfica & unzip
+  curl -o build/lineas_limite.zip -C - 'http://centrodedescargas.cnig.es/CentroDescargas/equipamiento/lineas_limite.zip'
+  unzip -jod build build/lineas_limite.zip recintos_municipales* recintos_provinciales*
+  rm -v build/lineas_limite.zip
+fi
+
+# Get municipalities data
+if [ ! -d data ]; then
+  # create data folder
+  mkdir data
+  # Get municipalities population data from INE & convert to csv
+  curl -o data/population_municipalities.zip -C - 'http://www.ine.es/pob_xls/pobmun.zip'
+  unzip data/population_municipalities.zip -d data
+  # Convert 2016 population excel into csv & clean first & last line
+  in2csv data/pobmun16.xlsx | sed "1d; $ d" > data/municipalities_ine.csv
+  # Convert csv population file to ndjson combining CPRO & CMUN as id
+  ndjson-cat <(csv2json data/municipalities_ine.csv) \
+    | ndjson-split \
+    | ndjson-map '{id: d.CPRO + d.CMUN, name: d.NOMBRE, population: d.POB16}' \
+    > data/municipalities_ine.ndjson
+  # Remove population excel files
+  rm -v data/pobmun* data/population_municipalities.zip
+fi
+
+# Get DVMI data from Google Spreadsheet as csv
+rm -v data/dvmi.csv
+curl -o data/dvmi.csv -L -C - 'https://docs.google.com/spreadsheets/d/15d0Yznn2SrlpzDs_W26Tgxyq1oWZmBNpNINiBN2HUVs/export?gid=0&format=csv'
