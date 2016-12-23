@@ -7,7 +7,7 @@ if [ ! -d build ]; then
   # Get lineas_limite.zip from Centro Nacional de Información Geográfica & unzip
   curl -o build/lineas_limite.zip -C - 'http://centrodedescargas.cnig.es/CentroDescargas/equipamiento/lineas_limite.zip'
   unzip -jod build build/lineas_limite.zip recintos_municipales* recintos_provinciales*
-  rm -v build/lineas_limite.zip
+  rm build/lineas_limite.zip
 fi
 
 # Get municipalities data
@@ -18,16 +18,63 @@ if [ ! -d data ]; then
   curl -o data/population_municipalities.zip -C - 'http://www.ine.es/pob_xls/pobmun.zip'
   unzip data/population_municipalities.zip -d data
   # Convert 2016 population excel into csv & clean first & last line
-  in2csv data/pobmun16.xlsx | sed "1d; $ d" > data/municipalities_ine.csv
+  in2csv data/pobmun16.xlsx | sed "1d; $ d" > data/municipalities.csv
   # Convert csv population file to ndjson combining CPRO & CMUN as id
-  ndjson-cat <(csv2json data/municipalities_ine.csv) \
+  ndjson-cat <(csv2json data/municipalities.csv) \
     | ndjson-split \
-    | ndjson-map '{id: d.CPRO + d.CMUN, name: d.NOMBRE, population: d.POB16}' \
-    > data/municipalities_ine.ndjson
+    | ndjson-map '{id: d.CPRO + d.CMUN, population: d.POB16, name: d.NOMBRE}' \
+    > data/municipalities.ndjson
+  # Convert .ndjson to .csv
+  json2csv -n < data/municipalities.ndjson > data/municipalities_population.csv
   # Remove population excel files
-  rm -v data/pobmun* data/population_municipalities.zip
+  rm data/pobmun* data/population_municipalities.zip data/municipalities.*
+
+  # Get regions population from INE as csv
+  curl -o data/regions_population.csv -C - 'http://www.ine.es/jaxiT3/files/t/es/csv_sc/2853.csv'
+
+  # Remove 1-6,8 lines & last 3 lines 
+  sed -e :a -e '$d;N;2,3ba' -e 'P;D' \
+    <(sed '1,6d;8d' data/regions_population.csv) \
+    > data/regions_population_clean.csv
+
+  # Replace first column region name with its code (using incremental index n with 02d format)
+  awk -F';' '{$1 = sprintf("%02d", n);} ++n' OFS=, data/regions_population_clean.csv > data/regions_population_clean_1.csv
+
+  # Remove all columns except first 2 (id,2016) & change header
+  sed 's/00,2016/id,population/' \
+    <( cut -d , -f 1-2 data/regions_population_clean_1.csv ) \
+    > data/regions_population.csv
+
+  # Merge regions & municipalities into a single file
+  cat data/municipalities_population.csv <( sed '1d;s/$/,/' data/regions_population.csv ) > data/municipalities_regions_population.csv
+
+  rm data/regions_population_clean*
 fi
 
 # Get DVMI data from Google Spreadsheet as csv
-rm -v data/dvmi.csv
+rm data/dvmi.csv
 curl -o data/dvmi.csv -L -C - 'https://docs.google.com/spreadsheets/d/15d0Yznn2SrlpzDs_W26Tgxyq1oWZmBNpNINiBN2HUVs/export?gid=0&format=csv'
+
+# Add population column to dvmi.csv with INE data
+ndjson-join 'd.id' \
+  <(csv2json -n data/dvmi.csv) \
+  <(csv2json -n data/municipalities_regions_population.csv) \
+  | ndjson-map 'Object.assign(d[0], d[1])' \
+  | ndjson-map '(delete d.name, d)' \
+  > data/dvmi.ndjson
+
+json2csv -n < data/dvmi.ndjson > data/dvmi.csv
+
+rm data/dvmi.ndjson
+
+# rm -v data/dvmi.ndjson
+# ndjson-cat <(csv2json data/dvmi.csv) \
+#   | ndjson-split \
+#   > data/dvmi.ndjson
+
+# # Add population column to dvmi.csv with INE data
+# rm -v data/dvmi_ine.ndjson
+# ndjson-join 'd.id' \
+#   data/dvmi.ndjson
+#   data/municipalities_ine.ndjson
+#   > data/dvmi_ine.ndjson
