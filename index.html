@@ -1,9 +1,23 @@
 <!DOCTYPE html>
+<html lang="es">
 <head>
+  <meta charset="utf-8">
   <style type="text/css">
 
     body{
-      font-family: Arial, sans-serif;
+      font-family: 'Source Sans Pro', Arial, sans-serif;
+    }
+
+    #dvmi-map{
+      text-align: center;
+    }
+
+    .map-description{
+      margin-bottom: 20px;
+    }
+
+    .map-svg{
+      overflow: hidden;
     }
     
     .nation{
@@ -14,7 +28,7 @@
 
     .regions,
     .provinces{
-      fill: #dfdddd;
+      fill: #e2e0e0;
       stroke: #fff;
       stroke-width: 1.5px;
       stroke-linejoin: round;
@@ -34,23 +48,59 @@
       stroke-width: 1.5;
     }
 
+    .municipality-2{
+      stroke-opacity: 0.92;
+    }
+    .municipality-3{
+      stroke-opacity: 0.84;
+    }
+    .municipality-4{
+      stroke-opacity: 0.76;
+    }
+
     .regions.active,
     .provinces.active{
       fill: #aaca45;
     }
 
     .labels{
-      fill: #444;
+      fill: #333;
       font-weight: 600;
-      text-shadow: 0 1px 0 white;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.7);
     }
 
-    .municipalities_labels{
+    .label-align-top,
+    .label-align-bottom {
+      text-anchor: middle;
+    }
+
+    .label-align-right {
+      text-anchor: start;
+    }
+
+    .label-align-left {
+      text-anchor: end;
+    }
+
+    .label-1{
+      font-size: 13px;
+    }
+    .label-2{
+      fill: #3a3a3a;
+      font-size: 12px;
+    }
+    .label-3{
+      fill: #444;
       font-size: 11px;
+    }
+    .label-4{
+      fill: #505050;
+      font-size: 10.5px;
     }
   
     .regions_labels{
-      font-size: 10px;
+      font-size: 11px;
+      font-weight: 600;
       text-anchor: middle;
       text-transform: uppercase;
     }
@@ -60,127 +110,20 @@
       stroke: #ddd;
       stroke-width: 1px;
     }
+
+    .cell path {
+      display: none;
+      fill: none;
+      stroke: #ccc;
+    }
   </style>
 </head>
 <body>
+  <div id="dvmi-map"></div>
 
-  <svg width="960" height="620"></svg>
-
-  <script src="https://d3js.org/d3.v4.min.js"></script>
+  <script src="js/d3.v4.min.js"></script>
   <script src="node_modules/topojson/dist/topojson.min.js"></script>
-  <script src="https://unpkg.com/d3-composite-projections@1.0.2"></script>
-  <script>
-    var SPREADSHEET_ID = '15d0Yznn2SrlpzDs_W26Tgxyq1oWZmBNpNINiBN2HUVs',
-        MUNICIPALITIES_RADIUS = 5;
-
-    var svg        = d3.select('svg'),
-        width      = +svg.attr('width'),
-        height     = +svg.attr('height');
-        
-    var projection = d3.geoConicConformalSpain(),
-        path       = d3.geoPath();
-
-    d3.queue()
-      .defer(d3.csv, '/data/dvmi.csv')
-      .defer(d3.json, '/es/municipalities.json')
-      .await(function(error, dvmi_data, topology) {
-
-        if (error) throw error;
-
-        // Get a Codes array in order to draw current DVMI regions & municipalities
-        dvmi_codes = dvmi_data.map(function(d){ return d.Code; });
-
-        // Setup dvmi data as an nested object usign code as key
-        dvmi_data = d3.nest()
-          .key(function(d) { return d.Code; })
-          .rollup(function(d) { return d[0]; })
-          .object(dvmi_data);
-
-        // Setup cartography projection & path function
-        projection
-          .scale(3500)
-          .translate([width/2, (height/2)]);
-
-        path.projection(projection);
-
-        // Get municipalities geometry using TodoJSON & dvmi_municipalities array
-        var municipalities_data = {
-          geometries: topology.objects.municipalities.geometries.filter(function(d){ return dvmi_codes.indexOf(d.id) !== -1; }),
-          type: 'GeometryCollection'
-        };
-
-        // Get municipalities nodes
-        var municipalities_nodes = topojson.feature(topology, municipalities_data).features;
-        municipalities_nodes.forEach(function(d){
-          var centroid = path.centroid(d);
-          d.x = centroid[0];
-          d.y = centroid[1];
-          delete d.properties;
-        });
-
-        // Use a collision force layout to avoid overlap in municipalities circles
-        var simulation = d3.forceSimulation(municipalities_nodes)
-          .force("x", d3.forceX(function(d) { return d.x; }).strength(1))
-          .force("y", d3.forceY(function(d) { return d.y; }).strength(1))
-          .force("collide", d3.forceCollide(MUNICIPALITIES_RADIUS))
-          .stop();
-        for (var i = 0; i < 120; ++i) simulation.tick();
-
-        /*
-          // Add nation path
-          svg.append('path')
-            .datum(topojson.feature(topology, topology.objects.nation))
-            .attr('class', 'nation')
-            .attr('d', path);
-        */
-
-        // Add composition border for Canarias
-        svg.append('path')
-          .attr('class', 'composite-border')
-          .attr('d', projection.getCompositionBorders());
-
-        // Add autonomous_regions paths
-        svg.selectAll('.regions')
-          .data(topojson.feature(topology, topology.objects.autonomous_regions).features)
-          .enter().append('path')
-            .attr('id', function(d){ return 'region-'+d.id; })
-            .attr('class', function(d){ return (dvmi_codes.indexOf(d.id) !== -1) ? 'regions active' : 'regions'; })
-            .attr('d', path);
-
-        // Add province paths
-        svg.selectAll('.provinces')
-          .data(topojson.feature(topology, topology.objects.provinces).features)
-          .enter().append('path')
-            .attr('id', function(d){ return 'province-'+d.id; })
-            .attr('class', 'provinces')
-            .attr('d', path);
-
-        // Add autonomous_regions texts    
-        svg.selectAll('.regions_labels')
-          .data(topojson.feature(topology, topology.objects.autonomous_regions).features)
-          .enter().append('text')
-            .attr('class', 'labels regions_labels')
-            .attr('transform', function(d) { return 'translate(' + path.centroid(d) + ')'; })
-            .text(function(d) { return (dvmi_data[d.id]) ? dvmi_data[d.id].Name : ''; });
-
-        // Add municipalities paths & texts
-        svg.selectAll('.municipalities')
-          .data(municipalities_nodes)
-          .enter().append('circle')
-            .attr('id', function(d){ return 'municipality-'+d.id; })
-            .attr('class', 'municipalities')
-            .attr('transform', function(d) { return 'translate('+d.x+','+d.y+')'; })
-            .attr('r', MUNICIPALITIES_RADIUS);
-
-        svg.selectAll('.municipalities_labels')
-          .data(municipalities_nodes)
-          .enter().append('text')
-            .attr('class', 'labels municipalities_labels')
-            .attr('transform', function(d) { return 'translate('+d.x+','+d.y+')'; })
-            .attr('dx', '.9em')
-            .attr('dy', '.4em')
-            .text(function(d) { return (dvmi_data[d.id]) ? dvmi_data[d.id].Name : ''; });
-      });
-  </script>
+  <script src="js/d3-composite-projections.js"></script>
+  <script src="js/dvmi-map.js"></script>
 </body>
 </html>
