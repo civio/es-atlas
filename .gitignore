@@ -3,3 +3,5 @@ npm-debug.log
 build/
 data/
 es/
+js/d3.js.map
+js/d3.js
