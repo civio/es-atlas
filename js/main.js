@@ -53,6 +53,45 @@ var getDvmiPopulation = function() {
   return (total*0.000001).toLocaleString('es-ES', {maximumFractionDigits: 1});
 };
 
+var itemOver = function(d) {
+  var data = dvmi_data[d.id];
+  if(d.id.length == 5){
+    d3.select('#municipality-'+d.id)
+      .classed('hover', true);
+  } else{
+    d3.select('#region-'+d.id)
+      .classed('hover', true);
+  }
+  $(this).popover({
+    placement: (d3.mouse(this)[1] > height/2) ? 'top' : 'bottom',
+    container: '#dvmi-map',
+    trigger: 'manual',
+    html : true,
+    content: '<small>'+data.date+'</small><strong>'+data.long_name+'</strong><p class="link"><p>'+data.description+'</p>'
+  });
+  $(this).popover('show');
+};
+
+var itemOut = function(d) {
+  if(d.id.length == 5){
+    d3.select('#municipality-'+d.id)
+      .classed('hover', false);
+  } else{
+    d3.select('#region-'+d.id)
+      .classed('hover', false);
+  }
+  $('.popover').each(function() {
+    $(this).remove();
+  });
+};
+
+var itemClick = function(d){
+  if (dvmi_data[d.id] && dvmi_data[d.id].url) {
+    var win = window.open(dvmi_data[d.id].url, '_blank');
+    win.focus();
+  }
+};
+
 var setupMap = function() {
 
   // Setup description
@@ -119,7 +158,7 @@ var setupMap = function() {
   var simulation = d3.forceSimulation(municipalities_nodes)
     .force('x', d3.forceX(function(d) { return d.x; }).strength(1))
     .force('y', d3.forceY(function(d) { return d.y; }).strength(1))
-    .force('collide', d3.forceCollide().radius(function(d) { return d.r; }))
+    .force('collide', d3.forceCollide().radius(function(d) { return 1+d.r; }))
     .stop();
   for (var i = 0; i < 120; ++i) simulation.tick();
 
@@ -129,12 +168,30 @@ var setupMap = function() {
     .y(function(d) { return d.y; })
     .extent([[-1, -1], [width + 1, height + 1]]);
 
+  /*
   var cells = svg.append('g')
     .attr('class', 'cell')
     .selectAll('path')
       .data(voronoi.polygons(municipalities_nodes))
       .enter().append('path')
         .attr('d', function(d) { return 'M' + d.join('L') + 'Z'; });
+  */
+
+  // New way: turn the cells into clip-paths (which should be appended to a defs element)
+  // from http://www.visualcinnamon.com/2015/07/voronoi.html
+  svg.append('defs')
+    .selectAll('.clip')
+    .data(voronoi.polygons(municipalities_nodes))
+    //First append a clipPath element
+    .enter().append('clipPath')
+      .attr('class', 'clip')
+      //Make sure each clipPath will have a unique id (connected to the circle element)
+      .attr('id', function(d) { return 'clip-' + d.data.id; })
+      //Then append a path element that will define the shape of the clipPath
+      .append('path')
+      .attr('class', 'clip-path-circle')
+      .attr('d', function(d) { return 'M' + d.join(',') + 'Z'; });
+
 
   // Add composition border for Canarias
   svg.append('path')
@@ -148,6 +205,11 @@ var setupMap = function() {
       .attr('id', function(d){ return 'region-'+d.id; })
       .attr('class', function(d){ return (dvmi_codes.indexOf(d.id) !== -1) ? 'regions active' : 'regions'; })
       .attr('d', path);
+
+  svg.selectAll('.regions.active')
+    .on('mouseover', itemOver)
+    .on('mouseout',  itemOut)
+    .on('click',     itemClick);
 
   // Add province paths
   svg.selectAll('.provinces')
@@ -194,12 +256,27 @@ var setupMap = function() {
       .attr('y', function(d) { return d.orient === 'bottom' ? d.data.r : d.orient === 'top' ? -d.data.r : null; })
       .text(function(d){ return (dvmi_data[d.data.id]) ? dvmi_data[d.data.id].short_name : ''; });
 
+
+  // Add mouse over voronois circles
+  svg.selectAll('.circle-catcher')
+    .data(municipalities_nodes)
+    .enter().append('circle')
+    .attr('class', function(d,i) { return 'circle-catcher ' + d.id; })
+    //Apply the clipPath element by referencing the one with the same countryCode
+    .attr('clip-path', function(d) { return 'url(#clip-' + d.id + ')'; })
+    .style('clip-path', function(d) { return 'url(#clip-' + d.id + ')'; }) //for safari
+    .attr('cx', function(d) {return d.x;})
+    .attr('cy', function(d) {return d.y;})
+    .attr('r', 20)
+    .on('mouseover', itemOver)
+    .on('mouseout',  itemOut)
+    .on('click',     itemClick);
 };
 
 // Get data files & setup map
 d3.queue()
   .defer(d3.csv, '/data/dvmi.csv')
-  .defer(d3.json, '/es/municipalities.json')
+  .defer(d3.json, '/data/municipalities.json')
   .await(function(error, _dvmi_data, _topology) {
     if (error) throw error;
     dvmi_data = _dvmi_data;
