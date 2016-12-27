@@ -9,6 +9,57 @@ QU=1e4
 rm -rvf es
 mkdir es
 
+# Get cartography
+if [ ! -d build ]; then
+  # create build folder
+  mkdir build
+  # Get lineas_limite.zip from Centro Nacional de Información Geográfica & unzip
+  curl -o build/lineas_limite.zip -C - 'http://centrodedescargas.cnig.es/CentroDescargas/equipamiento/lineas_limite.zip'
+  unzip -jod build build/lineas_limite.zip recintos_municipales* recintos_provinciales*
+  rm build/lineas_limite.zip
+fi
+
+# Get municipalities data
+if [ ! -d data ]; then
+  # create data folder
+  mkdir data
+  # Get municipalities population data from INE & convert to csv
+  curl -o data/population_municipalities.zip -C - 'http://www.ine.es/pob_xls/pobmun.zip'
+  unzip data/population_municipalities.zip -d data
+  # Convert 2016 population excel into csv & clean first & last line
+  in2csv data/pobmun16.xlsx | sed "1d; $ d" > data/municipalities.csv
+  # Convert csv population file to ndjson combining CPRO & CMUN as id
+  ndjson-cat <(csv2json data/municipalities.csv) \
+    | ndjson-split \
+    | ndjson-map '{id: d.CPRO + d.CMUN, population: d.POB16, name: d.NOMBRE}' \
+    > data/municipalities.ndjson
+  # Convert .ndjson to .csv
+  json2csv -n < data/municipalities.ndjson > data/municipalities_population.csv
+  # Remove population excel files
+  rm data/pobmun* data/population_municipalities.zip data/municipalities.*
+
+  # Get regions population from INE as csv
+  curl -o data/regions_population.csv -C - 'http://www.ine.es/jaxiT3/files/t/es/csv_sc/2853.csv'
+
+  # Remove 1-6,8 lines & last 3 lines 
+  sed -e :a -e '$d;N;2,3ba' -e 'P;D' \
+    <(sed '1,6d;8d' data/regions_population.csv) \
+    > data/regions_population_clean.csv
+
+  # Replace first column region name with its code (using incremental index n with 02d format)
+  awk -F';' '{$1 = sprintf("%02d", n);} ++n' OFS=, data/regions_population_clean.csv > data/regions_population_clean_1.csv
+
+  # Remove all columns except first 2 (id,2016) & change header
+  sed 's/00,2016/id,population/' \
+    <( cut -d , -f 1-2 data/regions_population_clean_1.csv ) \
+    > data/regions_population.csv
+
+  # Merge regions & municipalities into a single file
+  cat data/municipalities_population.csv <( sed '1d;s/$/,/' data/regions_population.csv ) > data/municipalities_regions_population.csv
+
+  rm data/regions_population_clean*
+fi
+
 # Convert shp provinces files to GeoJSON
 geo2topo -n provinces=<( \
     shp2json --encoding utf8 -n build/recintos_provinciales_inspire_peninbal_etrs89.shp \
